@@ -122,7 +122,7 @@ func TestARemovalOfTheWorkingLabelStopsTheTask(t *testing.T) {
 		t.Errorf("state = %s", state)
 	}
 	runs := fake.CheckRuns(shop)
-	if len(runs) != 2 || runs[1].HeadSHA != head(t, fake, "mobius/41") || runs[1].Conclusion != "failure" || runs[1].Output.Summary != "Stopped by a label removal." {
+	if len(runs) != 1 || runs[0].HeadSHA != head(t, fake, "mobius/41") || runs[0].Conclusion != "failure" || runs[0].Output.Summary != "Stopped by a label removal." {
 		t.Errorf("check runs = %+v", runs)
 	}
 	noTaskLabels(t, fake)

@@ -67,22 +67,31 @@ func (r Repository) SubmitReview(ctx context.Context, number int64, commit, body
 	return err
 }
 
-// CreateCheckRun adds the check run name with status to the commit sha, and gives its id.
-func (r Repository) CreateCheckRun(ctx context.Context, name, sha, status string) (int64, error) {
-	checkRun, _, err := r.Client.Checks.CreateCheckRun(ctx, r.Owner(), r.Name(), gh.CreateCheckRunOptions{Name: name, HeadSHA: sha, Status: &status})
-	return checkRun.GetID(), err
+// CreateCheckRun adds the check run name with status to the commit sha. A completed check run has the conclusion. A
+// check run with a title has the title and the summary.
+func (r Repository) CreateCheckRun(ctx context.Context, name, sha, status, conclusion, title, summary string) error {
+	options := gh.CreateCheckRunOptions{Name: name, HeadSHA: sha, Status: &status}
+	if conclusion != "" {
+		options.Conclusion = &conclusion
+	}
+	if title != "" {
+		options.Output = &gh.CheckRunOutput{Title: &title, Summary: &summary}
+	}
+	_, _, err := r.Client.Checks.CreateCheckRun(ctx, r.Owner(), r.Name(), options)
+	return err
 }
 
-// CreateFailedCheckRun adds the completed check run name with the conclusion failure, title and summary to the
-// commit sha.
-func (r Repository) CreateFailedCheckRun(ctx context.Context, name, sha, title, summary string) error {
-	_, _, err := r.Client.Checks.CreateCheckRun(ctx, r.Owner(), r.Name(), gh.CreateCheckRunOptions{
-		Name:       name,
-		HeadSHA:    sha,
-		Status:     new("completed"),
-		Conclusion: new("failure"),
-		Output:     &gh.CheckRunOutput{Title: &title, Summary: &summary},
-	})
+// UpdateCheckRun sets the status of the check run id of name. A completed check run has the conclusion. A check run
+// with a title gets the title and the summary.
+func (r Repository) UpdateCheckRun(ctx context.Context, id int64, name, status, conclusion, title, summary string) error {
+	options := gh.UpdateCheckRunOptions{Name: name, Status: &status}
+	if conclusion != "" {
+		options.Conclusion = &conclusion
+	}
+	if title != "" {
+		options.Output = &gh.CheckRunOutput{Title: &title, Summary: &summary}
+	}
+	_, _, err := r.Client.Checks.UpdateCheckRun(ctx, r.Owner(), r.Name(), id, options)
 	return err
 }
 

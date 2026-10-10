@@ -435,7 +435,7 @@ func (e *Engine) stopTask(ctx context.Context, repository github.Repository, tas
 		if err != nil {
 			return err
 		}
-		if err := repository.CreateFailedCheckRun(ctx, checkRunName, pullRequest.GetHead().GetSHA(), "Stopped", summary); err != nil {
+		if err := setCheckRun(ctx, repository, pullRequest.GetHead().GetSHA(), "completed", "failure", "Stopped", summary); err != nil {
 			return err
 		}
 	}
@@ -531,7 +531,7 @@ func (e *Engine) decline(ctx context.Context, c caller, repository github.Reposi
 		}
 		if pullRequest.GetState() == "open" {
 			number := task.PullRequest.Int64
-			if err := repository.CreateFailedCheckRun(ctx, checkRunName, pullRequest.GetHead().GetSHA(), "Declined", input.Reason); err != nil {
+			if err := setCheckRun(ctx, repository, pullRequest.GetHead().GetSHA(), "completed", "failure", "Declined", input.Reason); err != nil {
 				return "", err
 			}
 			if _, err := repository.AddComment(ctx, number, input.Reason); err != nil {

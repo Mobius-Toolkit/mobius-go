@@ -3,6 +3,7 @@ package engine_test
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -49,6 +50,11 @@ func roundEnded(state string) bool { return state == "checks" || state == "needs
 
 func checkRun(name, sha, status, conclusion string) testkit.CheckRun {
 	return testkit.CheckRun{Name: name, HeadSHA: sha, Status: status, Conclusion: conclusion, Output: &testkit.CheckRunOutput{Title: name + " title", Summary: name + " summary"}}
+}
+
+// mobiusCheckRuns gives the Mobius check runs of the shop, in the order of their creation.
+func mobiusCheckRuns(fake *testkit.FakeGitHub) []testkit.CheckRun {
+	return slices.DeleteFunc(fake.CheckRuns(shop), func(run testkit.CheckRun) bool { return run.Name != "Mobius" })
 }
 
 // sentinelRound adds a failed check run sentinel on the head, and gives the prompt of the fix round that it starts.
@@ -289,7 +295,7 @@ func TestAFailedCheckRunAtMaxFixRoundsHandsTheTaskToAHuman(t *testing.T) {
 		t.Errorf("Implementers = %d", count)
 	}
 	runs := testkit.WaitForValue(t, func() ([]testkit.CheckRun, bool) {
-		runs := fake.CheckRuns(shop)
+		runs := mobiusCheckRuns(fake)
 		last := runs[len(runs)-1]
 		return runs, last.Output != nil && last.Output.Title == "Round limit"
 	})
@@ -298,3 +304,5 @@ func TestAFailedCheckRunAtMaxFixRoundsHandsTheTaskToAHuman(t *testing.T) {
 	}
 	waitForLeadPrompt(t, server, " stop of #41 \"Add plan model\": the pull request has open items after 1 fix rounds.")
 }
+
+var replacedOutput = &testkit.CheckRunOutput{Title: "Replaced by a new head", Summary: "A new head of the pull request replaced this commit."}

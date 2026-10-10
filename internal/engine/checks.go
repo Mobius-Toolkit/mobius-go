@@ -167,14 +167,8 @@ func (e *Engine) onChecks(ctx context.Context, repository github.Repository, tas
 	if err != nil {
 		return err
 	}
-	checkRun, err := openCheckRun(ctx, repository, head)
-	if err != nil {
+	if err := setCheckRun(ctx, repository, head, "in_progress", "", "", ""); err != nil {
 		return err
-	}
-	if checkRun == 0 {
-		if _, err := repository.CreateCheckRun(ctx, checkRunName, head, "in_progress"); err != nil {
-			return err
-		}
 	}
 	implementer, found, err := e.implementerSession(ctx, task)
 	if err != nil {
@@ -273,7 +267,7 @@ func (e *Engine) ciFailed(ctx context.Context, repository github.Repository, tas
 	if err != nil {
 		return err
 	}
-	if err := repository.CreateFailedCheckRun(ctx, checkRunName, pullRequest.GetHead().GetSHA(), "CI failed", "The CI of the head commit failed, and a fix round cannot change it."); err != nil {
+	if err := setCheckRun(ctx, repository, pullRequest.GetHead().GetSHA(), "completed", "failure", "CI failed", "The CI of the head commit failed, and a fix round cannot change it."); err != nil {
 		return err
 	}
 	reason := "the CI of the head commit failed, and a fix round cannot change it. Mobius set the Mobius check to failure and added mobius:needs-human."

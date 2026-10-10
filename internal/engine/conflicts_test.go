@@ -74,7 +74,7 @@ func TestAMergeConflictStartsAConflictRoundThatMergesTheBaseBranch(t *testing.T)
 	for _, run := range fake.CheckRuns(shop) {
 		runs = append(runs, [2]string{run.HeadSHA, run.Conclusion})
 	}
-	if want := [][2]string{{first, ""}, {merged, ""}}; !reflect.DeepEqual(runs, want) {
+	if want := [][2]string{{first, "neutral"}, {merged, ""}}; !reflect.DeepEqual(runs, want) {
 		t.Errorf("check runs = %v", runs)
 	}
 	if pullRequests := fake.PullRequests(shop); len(pullRequests) != 1 || !pullRequests[0].Draft {
@@ -266,7 +266,7 @@ func TestAConflictRoundThatDoesNotMergeTheBaseBranchStopsTheTask(t *testing.T) {
 
 	waitForLeadPrompt(t, server, " stop of #41 \"Add plan model\": the conflict round did not merge the base branch.")
 	runs := fake.CheckRuns(shop)
-	if len(runs) != 2 || runs[1].HeadSHA != head(t, fake, "mobius/41") || runs[1].Conclusion != "failure" || runs[1].Output.Summary != "The Implementer did not merge `origin/main`." {
+	if len(runs) != 1 || runs[0].HeadSHA != head(t, fake, "mobius/41") || runs[0].Conclusion != "failure" || runs[0].Output.Summary != "The Implementer did not merge `origin/main`." {
 		t.Errorf("check runs = %+v", runs)
 	}
 	if !hasLabel(fake, "mobius:needs-human") || hasLabel(fake, "mobius:working") {

@@ -155,7 +155,7 @@ func TestAFixRoundRepliesWithThePushedFixCommitAndResolvesTheThread(t *testing.T
 	if thread := fake.ReviewThread(shop, 42, 2); !reflect.DeepEqual(thread, want) {
 		t.Errorf("thread = %+v", thread)
 	}
-	runs := []testkit.CheckRun{{Name: "Mobius", HeadSHA: first, Status: "in_progress"}, {Name: "Mobius", HeadSHA: sha, Status: "in_progress"}}
+	runs := []testkit.CheckRun{{Name: "Mobius", HeadSHA: first, Status: "completed", Conclusion: "neutral", Output: replacedOutput}, {Name: "Mobius", HeadSHA: sha, Status: "in_progress"}}
 	if !reflect.DeepEqual(fake.CheckRuns(shop), runs) {
 		t.Errorf("check runs = %+v", fake.CheckRuns(shop))
 	}
@@ -233,7 +233,10 @@ func TestAFindingAfterMaxFixRoundsStopsTheTaskUntilACommentOfATrustedUser(t *tes
 	if reviews := fake.SubmittedReviews(shop, 42); !reflect.DeepEqual(reviews, []testkit.SubmittedReview{review, second}) {
 		t.Errorf("reviews = %+v", reviews)
 	}
-	runs := []testkit.CheckRun{{Name: "Mobius", HeadSHA: first, Status: "in_progress"}, {Name: "Mobius", HeadSHA: sha, Status: "completed", Conclusion: "failure"}}
+	runs := []testkit.CheckRun{
+		{Name: "Mobius", HeadSHA: first, Status: "completed", Conclusion: "neutral", Output: replacedOutput},
+		{Name: "Mobius", HeadSHA: sha, Status: "completed", Conclusion: "failure", Output: &testkit.CheckRunOutput{Title: "Round limit", Summary: "The pull request has open items after 2 review rounds."}},
+	}
 	if !reflect.DeepEqual(fake.CheckRuns(shop), runs) {
 		t.Errorf("check runs = %+v", fake.CheckRuns(shop))
 	}

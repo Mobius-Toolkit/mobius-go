@@ -71,11 +71,10 @@ type result struct {
 	pushed  pushed
 }
 
-// pushed is the head that a done Implementer pushed, with its pull request and its Mobius check run.
+// pushed is the head that a done Implementer pushed, with its pull request.
 type pushed struct {
 	pullRequest *gh.PullRequest
 	head        string
-	checkRun    int64
 }
 
 // round is a fix round on the pull request of the task with the open items.
@@ -83,8 +82,6 @@ type round struct {
 	task        store.Task
 	title       string
 	pullRequest *gh.PullRequest
-	// checkRun is the id of the Mobius check run of the head of the pull request, or 0 when Mobius has no id of it.
-	checkRun int64
 	// counts tells that the round counts toward max_fix_rounds. A round with no fix action does not count.
 	counts bool
 	// items is the prompt text of the open items with their actions.
@@ -266,6 +263,29 @@ func openCheckRun(ctx context.Context, repository github.Repository, head string
 		}
 	}
 	return 0, nil
+}
+
+// setCheckRun sets the Mobius check run of the head. It changes the check run that is not complete, or adds one when
+// the head has none. A head has a maximum of one Mobius check run that is not complete.
+func setCheckRun(ctx context.Context, repository github.Repository, head, status, conclusion, title, summary string) error {
+	checkRun, err := openCheckRun(ctx, repository, head)
+	if err != nil {
+		return err
+	}
+	if checkRun == 0 {
+		return repository.CreateCheckRun(ctx, checkRunName, head, status, conclusion, title, summary)
+	}
+	return repository.UpdateCheckRun(ctx, checkRun, checkRunName, status, conclusion, title, summary)
+}
+
+// replaceCheckRun completes the Mobius check run of the old head that is not complete, because a new head replaced the
+// old head.
+func replaceCheckRun(ctx context.Context, repository github.Repository, head string) error {
+	checkRun, err := openCheckRun(ctx, repository, head)
+	if err != nil || checkRun == 0 {
+		return err
+	}
+	return repository.UpdateCheckRun(ctx, checkRun, checkRunName, "completed", "neutral", "Replaced by a new head", "A new head of the pull request replaced this commit.")
 }
 
 func (e *Engine) approve(ctx context.Context, repository github.Repository, task store.Task, title string, pullRequest *gh.PullRequest, checkRun int64) error {
@@ -689,12 +709,11 @@ func (e *Engine) stopAtLimit(ctx context.Context, repository github.Repository, 
 	}
 	rounds := e.config.MaxFixRounds
 	summary := fmt.Sprintf("The pull request has open items after %d %s rounds.", rounds, limit)
-	if r.checkRun != 0 {
-		err = repository.CompleteCheckRun(ctx, r.checkRun, checkRunName, "failure")
-	} else {
-		err = repository.CreateFailedCheckRun(ctx, checkRunName, r.pullRequest.GetHead().GetSHA(), "Round limit", summary)
-	}
+	pullRequest, err := repository.PullRequest(ctx, int64(r.pullRequest.GetNumber()))
 	if err != nil {
+		return err
+	}
+	if err := setCheckRun(ctx, repository, pullRequest.GetHead().GetSHA(), "completed", "failure", "Round limit", summary); err != nil {
 		return err
 	}
 	reason := fmt.Sprintf("the pull request has open items after %d %s rounds. Mobius set the Mobius check to failure and added mobius:needs-human.", rounds, limit)
@@ -1060,6 +1079,14 @@ func (e *Engine) push(ctx context.Context, a *Agent, j *job, failedLog string, m
 			failedLog = tail(output, logTail)
 		}
 	}
+	oldHead := ""
+	if j.pullRequest != nil {
+		current, err := repository.PullRequest(ctx, int64(j.pullRequest.GetNumber()))
+		if err != nil {
+			return result{}, err
+		}
+		oldHead = current.GetHead().GetSHA()
+	}
 	e.gitMu.Lock()
 	pushStartedAt := now()
 	head, err := runner.Push(ctx, dataDir, worktree, token, j.branch)
@@ -1087,6 +1114,11 @@ func (e *Engine) push(ctx context.Context, a *Agent, j *job, failedLog string, m
 		}
 		e.publish(Change{Node: new(e.node(session))})
 	}
+	if oldHead != head && oldHead != "" {
+		if err := replaceCheckRun(ctx, repository, oldHead); err != nil {
+			return result{}, err
+		}
+	}
 	if err := a.postReplies(ctx, repository, int64(j.pullRequest.GetNumber())); err != nil {
 		return result{}, err
 	}
@@ -1097,14 +1129,13 @@ func (e *Engine) push(ctx context.Context, a *Agent, j *job, failedLog string, m
 	}
 	if failedLog == "" && !merged {
 		summary := fmt.Sprintf("The Implementer did not merge `origin/%s`.", repository.DefaultBranch)
-		return result{outcome: notMerged}, repository.CreateFailedCheckRun(ctx, checkRunName, head, "Conflict round failed", summary)
+		return result{outcome: notMerged}, setCheckRun(ctx, repository, head, "completed", "failure", "Conflict round failed", summary)
 	}
 	if failedLog != "" {
 		summary := fmt.Sprintf("`.mobius/check` failed %d times. The last output ends with these lines:\n\n```\n%s\n```", e.config.MaxCheckAttempts, failedLog)
-		return result{outcome: checkFailed, text: failedLog}, repository.CreateFailedCheckRun(ctx, checkRunName, head, "Local check failed", summary)
+		return result{outcome: checkFailed, text: failedLog}, setCheckRun(ctx, repository, head, "completed", "failure", "Local check failed", summary)
 	}
-	checkRun, err := repository.CreateCheckRun(ctx, checkRunName, head, "in_progress")
-	return result{outcome: done, pushed: pushed{j.pullRequest, head, checkRun}}, err
+	return result{outcome: done, pushed: pushed{j.pullRequest, head}}, setCheckRun(ctx, repository, head, "in_progress", "", "", "")
 }
 
 // postReplies posts the held replies of the Implementer on the pull request. A posted reply leaves the list, so a later

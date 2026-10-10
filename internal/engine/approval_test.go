@@ -213,8 +213,8 @@ func assertCIStop(t *testing.T, server *testserver.Server, fake *testkit.FakeGit
 	if labels := fake.Labels(shop, 41); !slices.Equal(labels, []string{"mobius:needs-human"}) {
 		t.Errorf("labels = %q", labels)
 	}
-	runs := fake.CheckRuns(shop)
-	if last := runs[len(runs)-1]; last.Name != "Mobius" || last.HeadSHA != sha || last.Conclusion != "failure" {
+	runs := mobiusCheckRuns(fake)
+	if len(runs) != 1 || runs[0].HeadSHA != sha || runs[0].Conclusion != "failure" {
 		t.Errorf("check runs = %+v", runs)
 	}
 	var stops []leadEvent

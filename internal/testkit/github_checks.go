@@ -419,9 +419,10 @@ func (g *FakeGitHub) checkRunOf(w http.ResponseWriter, r *http.Request) (int, bo
 
 func (g *FakeGitHub) updateCheckRun(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Name       string `json:"name"`
-		Status     string `json:"status"`
-		Conclusion string `json:"conclusion"`
+		Name       string          `json:"name"`
+		Status     string          `json:"status"`
+		Conclusion string          `json:"conclusion"`
+		Output     *CheckRunOutput `json:"output"`
 	}
 	if !decode(w, r, &request) {
 		return
@@ -434,6 +435,9 @@ func (g *FakeGitHub) updateCheckRun(w http.ResponseWriter, r *http.Request) {
 	}
 	g.checkRuns[index].Status = request.Status
 	g.checkRuns[index].Conclusion = request.Conclusion
+	if request.Output != nil {
+		g.checkRuns[index].Output = request.Output
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"id": index + 1})
 }
 

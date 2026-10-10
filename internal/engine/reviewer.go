@@ -28,15 +28,13 @@ type reviewJob struct {
 	title       string
 	pullRequest *gh.PullRequest
 	head        string
-	// checkRun is the id of the Mobius check run of the head.
-	checkRun int64
 	// parent is the session of the Implementer that pushed the head.
 	parent sql.NullInt64
 }
 
 // round gives the fix round of the review of the task with the items.
 func (j *reviewJob) round(task store.Task, items string, parent sql.NullInt64) round {
-	return round{task: task, title: j.title, pullRequest: j.pullRequest, checkRun: j.checkRun, counts: true, items: items, parent: parent}
+	return round{task: task, title: j.title, pullRequest: j.pullRequest, counts: true, items: items, parent: parent}
 }
 
 // afterConflictRound tells that the task has the review of the head that a conflict round pushed. Such a review does
@@ -67,13 +65,13 @@ func (e *Engine) review(ctx context.Context, j *job, p pushed, session int64) er
 	if err := e.queries.SetTaskWorker(ctx, worker); err != nil {
 		return err
 	}
-	e.runReviewer(reviewJob{task: j.task, title: j.title, pullRequest: p.pullRequest, head: p.head, checkRun: p.checkRun, parent: sql.NullInt64{Int64: session, Valid: true}})
+	e.runReviewer(reviewJob{task: j.task, title: j.title, pullRequest: p.pullRequest, head: p.head, parent: sql.NullInt64{Int64: session, Valid: true}})
 	return nil
 }
 
 // restartReviewer starts the Reviewer of the queued or working task again after a restart of the server, or after the
-// poll found it with no Worker (lost). The head of the pull request gets a new Mobius check run, because the store has
-// no id of the old one. An error in the steps before the session starts the Worker again.
+// poll found it with no Worker (lost). The head of the pull request gets a Mobius check run when it has none. An error in the
+// steps before the session starts the Worker again.
 func (e *Engine) restartReviewer(repository github.Repository, task store.Task, lost bool) {
 	if !task.PullRequest.Valid || !task.Branch.Valid {
 		return
@@ -105,11 +103,10 @@ func (e *Engine) restartReviewer(repository github.Repository, task store.Task, 
 			return false, err
 		}
 		head := pullRequest.GetHead().GetSHA()
-		checkRun, err := repository.CreateCheckRun(ctx, checkRunName, head, "in_progress")
-		if err != nil {
+		if err := setCheckRun(ctx, repository, head, "in_progress", "", "", ""); err != nil {
 			return false, err
 		}
-		j = reviewJob{task: task, title: j.title, pullRequest: pullRequest, head: head, checkRun: checkRun, parent: parent}
+		j = reviewJob{task: task, title: j.title, pullRequest: pullRequest, head: head, parent: parent}
 		return true, nil
 	}, func(ctx context.Context) error { return e.reviewer(ctx, &j) })
 }
